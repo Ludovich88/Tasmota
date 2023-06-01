@@ -17,7 +17,7 @@ concurrency:
 jobs:
   be_solidify:
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota' && github.ref_name == 'development'
+    if: github.repository == 'Ludovich88/Tasmota' && github.ref_name == 'development'
     continue-on-error: true
     steps:
       - uses: actions/checkout@v3
@@ -50,7 +50,7 @@ jobs:
   push_solidified:
     needs: be_solidify
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota' && github.ref_name == 'development'
+    if: github.repository == 'Ludovich88/Tasmota' && github.ref_name == 'development'
     continue-on-error: true
     steps:
       - uses: actions/checkout@v3
@@ -77,7 +77,7 @@ jobs:
   safeboot-images:
     needs: push_solidified
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota'
+    if: github.repository == 'Ludovich88/Tasmota'
     continue-on-error: true
     strategy:
       matrix:
@@ -113,7 +113,7 @@ jobs:
   base-images:
     needs: push_solidified
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota'
+    if: github.repository == 'Ludovich88/Tasmota'
     continue-on-error: true
     strategy:
       matrix:
@@ -151,7 +151,7 @@ jobs:
   base32-images:
     needs: safeboot-images
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota'
+    if: github.repository == 'Ludovich88/Tasmota'
     continue-on-error: true
     strategy:
       matrix:
@@ -202,7 +202,7 @@ jobs:
   language-images:
     needs: safeboot-images
     runs-on: ubuntu-latest
-    if: github.repository == 'arendst/Tasmota'
+    if: github.repository == 'Ludovich88/Tasmota'
     continue-on-error: true
     strategy:
       matrix:
@@ -236,13 +236,13 @@ jobs:
           name: firmware
           path: ./build_output
 
-  Start_final_copy:
-    needs: [base-images, base32-images, language-images]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Dispatch workflow in arendst/Tasmota-firmware
-      run: |
-         curl -X POST https://api.github.com/repos/arendst/Tasmota-firmware/actions/workflows/fetch_deploy.yml/dispatches \
-         -H 'Accept: application/vnd.github.everest-preview+json' \
-         -u ${{ secrets.API_TOKEN_GITHUB }} \
-         --data '{"ref": "gh_actions"}'
+#  Start_final_copy:
+#    needs: [base-images, base32-images, language-images]
+#    runs-on: ubuntu-latest
+#    steps:
+#    - name: Dispatch workflow in arendst/Tasmota-firmware
+#      run: |
+#         curl -X POST https://api.github.com/repos/arendst/Tasmota-firmware/actions/workflows/fetch_deploy.yml/dispatches \
+#         -H 'Accept: application/vnd.github.everest-preview+json' \
+#         -u ${{ secrets.API_TOKEN_GITHUB }} \
+#         --data '{"ref": "gh_actions"}'
