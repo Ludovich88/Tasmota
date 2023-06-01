@@ -43,22 +43,22 @@
 #define BL0939_UREF                 17159     // =(79931*0,51*1000)/(1,218*(390*5+0,51)) = 17158,92
 #define BL0939_IREF                 266013    // =(324004*1)/1,218 = 266013,14
 
-#define BL0940_PREF                 1430
-#define BL0940_UREF                 33000
-#define BL0940_IREF                 275000
+#define BL0940_PREF                 713       //1430
+#define BL0940_UREF                 17159     //33000
+#define BL0940_IREF                 266013    //275000
 
 #define BL0942_PREF                 596
 #define BL0942_UREF                 15187
 #define BL0942_IREF                 251213
 
-#define BL09XX_WRITE_COMMAND        0xA0  // 0xA8 according to documentation
+#define BL09XX_WRITE_COMMAND        0xA8  // 0xA8 according to documentation
 #define BL09XX_REG_I_FAST_RMS_CTRL  0x10
 #define BL09XX_REG_MODE             0x18
 #define BL09XX_REG_SOFT_RESET       0x19
 #define BL09XX_REG_USR_WRPROT       0x1A
 #define BL09XX_REG_TPS_CTRL         0x1B
 
-#define BL09XX_READ_COMMAND         0x50  // 0x58 according to documentation
+#define BL09XX_READ_COMMAND         0x58  // 0x58 according to documentation
 #define BL09XX_FULL_PACKET          0xAA
 
 #define BL09XX_PACKET_HEADER        0x55  // 0x58 according to documentation
