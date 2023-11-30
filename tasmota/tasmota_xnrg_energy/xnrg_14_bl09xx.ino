@@ -45,7 +45,7 @@
 
 #define BL0940_PREF                 429      //713       1430
 #define BL0940_UREF                 14394    //17159     33000
-#define BL0940_IREF                 202200   //266013    275000
+#define BL0940_IREF                 383570   //266013    275000
 
 #define BL0942_PREF                 596
 #define BL0942_UREF                 15187
