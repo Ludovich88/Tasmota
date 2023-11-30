@@ -43,9 +43,9 @@
 #define BL0939_UREF                 17159     // =(79931*0,51*1000)/(1,218*(390*5+0,51)) = 17158,92
 #define BL0939_IREF                 266013    // =(324004*1)/1,218 = 266013,14
 
-#define BL0940_PREF                 713       //1430
-#define BL0940_UREF                 17159     //33000
-#define BL0940_IREF                 266013    //275000
+#define BL0940_PREF                 429      //713       1430
+#define BL0940_UREF                 14394    //17159     33000
+#define BL0940_IREF                 202200   //266013    275000
 
 #define BL0942_PREF                 596
 #define BL0942_UREF                 15187
