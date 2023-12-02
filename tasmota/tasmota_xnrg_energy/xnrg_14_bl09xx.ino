@@ -45,7 +45,7 @@
                                   //R_Switch           R_Energy
 #define BL0940_PREF                 713       //1099     429      713       1430
 #define BL0940_UREF                 17159     //17159    14394    17159     33000
-#define BL0940_IREF                 2660013   //414570   383570   266013    275000
+#define BL0940_IREF                 266013   //414570   383570   266013    275000
 
 #define BL0942_PREF                 596
 #define BL0942_UREF                 15187
