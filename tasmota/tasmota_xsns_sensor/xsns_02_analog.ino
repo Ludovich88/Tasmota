@@ -17,12 +17,18 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef FIRMWARE_MINIMAL
+
 #ifdef USE_ADC
 /*********************************************************************************************\
  * ADC support for ESP8266 GPIO17 (=PIN_A0) and ESP32 up to 8 channels on GPIO32 to GPIO39
 \*********************************************************************************************/
 
 #define XSNS_02                       2
+
+#ifdef ESP32
+#include "esp32-hal-adc.h"
+#endif
 
 #ifdef ESP8266
 #define ANALOG_RESOLUTION             10               // 12 = 4095, 11 = 2047, 10 = 1023
@@ -171,11 +177,13 @@ struct {
   int indexOfPointer = -1;
 } Adc[MAX_ADCS];
 
-#ifdef ESP8266
 bool adcAttachPin(uint8_t pin) {
+#ifdef ESP8266
   return (ADC0_PIN == pin);
+#else  // ESP32
+  return true;
+#endif  // ESP32  
 }
-#endif
 
 void AdcSaveSettings(uint32_t idx) {
   char parameters[32];
@@ -297,7 +305,6 @@ void AdcInit(void) {
 
   if (Adcs.present) {
 #ifdef ESP32
-    analogSetClockDiv(1);               // Default 1
 #if CONFIG_IDF_TARGET_ESP32
     analogSetWidth(ANALOG_RESOLUTION);  // Default 12 bits (0 - 4095)
 #endif  // CONFIG_IDF_TARGET_ESP32
@@ -311,6 +318,27 @@ void AdcInit(void) {
   }
 }
 
+uint32_t AdcRange(void) {
+  return ANALOG_RANGE;
+}
+
+bool AdcPin(uint32_t pin) {
+  for (uint32_t idx = 0; idx < Adcs.present; idx++) {
+    if (pin == Adc[idx].pin) {
+      return true;
+    }
+  }
+  return false;
+}
+
+uint16_t AdcRead1(uint32_t pin) {
+#ifdef ESP32 
+  return analogReadMilliVolts(pin) / (ANALOG_V33*1000) * ANALOG_RANGE; // go back from mV to ADC
+#else
+  return analogRead(pin);
+#endif
+}
+
 uint16_t AdcRead(uint32_t pin, uint32_t factor) {
   // factor 1 = 2 samples
   // factor 2 = 4 samples
@@ -322,10 +350,17 @@ uint16_t AdcRead(uint32_t pin, uint32_t factor) {
   uint32_t samples = 1 << factor;
   uint32_t analog = 0;
   for (uint32_t i = 0; i < samples; i++) {
+#ifdef ESP32 
+    analog += analogReadMilliVolts(pin);  // get the value corrected by calibrated values from the eFuses
+#else
     analog += analogRead(pin);
+#endif
     delay(1);
   }
   analog >>= factor;
+#ifdef ESP32
+  analog = analog/(ANALOG_V33*1000) * ANALOG_RANGE; // go back from mV to ADC
+#endif
   return analog;
 }
 
@@ -891,3 +926,4 @@ bool Xsns02(uint32_t function) {
 }
 
 #endif  // USE_ADC
+#endif  // FIRMWARE_MINIMAL

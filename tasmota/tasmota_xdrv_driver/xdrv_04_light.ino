@@ -1358,9 +1358,10 @@ void LightColorOffset(int32_t offset) {
   uint16_t hue;
   uint8_t sat;
   light_state.getHSB(&hue, &sat, nullptr);  // Allow user control over Saturation
-  hue += offset;
-  if (hue < 0) { hue += 359; }
-  if (hue > 359) { hue -= 359; }
+  int16_t hue_new = hue + offset;
+  if (hue_new < 0) { hue_new += 359; }
+  if (hue_new > 359) { hue_new -= 359; }
+  hue = hue_new;
   if (!Light.pwm_multi_channels) {
     light_state.setHS(hue, sat);
   } else {
@@ -1548,6 +1549,9 @@ void LightPreparePower(power_t channels = 0xFFFFFFFF) {    // 1 = only RGB, 2 = 
   #ifdef USE_DOMOTICZ
         DomoticzUpdatePowerState(Light.device + i);
   #endif  // USE_DOMOTICZ
+  #ifdef USE_KNX
+        KnxUpdateLight();
+  #endif
       }
     }
   } else {
@@ -1584,6 +1588,9 @@ void LightPreparePower(power_t channels = 0xFFFFFFFF) {    // 1 = only RGB, 2 = 
 #ifdef USE_DOMOTICZ
     DomoticzUpdatePowerState(Light.device);
 #endif  // USE_DOMOTICZ
+#ifdef USE_KNX
+    KnxUpdateLight();
+#endif
   }
 
   if (Settings->flag3.hass_tele_on_power) {  // SetOption59 - Send tele/%topic%/STATE in addition to stat/%topic%/RESULT
@@ -1776,9 +1783,10 @@ void LightAnimate(void)
   // make sure we update CT range in case SetOption82 was changed
   Light.strip_timer_counter++;
 
-  // set sleep parameter: either settings,
-  // or set a maximum of PWM_MAX_SLEEP if light is on or Fade is running
-  if (Light.power || Light.fade_running) {
+  // Set a maximum sleep of PWM_MAX_SLEEP if Fade is running, or if light is on and
+  // a frequently updating light scheme is in use. This is to allow smooth transitions
+  // between light levels and colors.
+  if ((Settings->light_scheme > LS_POWER && Light.power) || Light.fade_running) {
     if (TasmotaGlobal.sleep > PWM_MAX_SLEEP) {
       sleep_previous = TasmotaGlobal.sleep;     // save previous value of sleep
       TasmotaGlobal.sleep = PWM_MAX_SLEEP;      // set a maximum value (in milliseconds) to sleep to ensure that animations are smooth
@@ -1911,19 +1919,12 @@ void LightAnimate(void)
         cur_col_10[i] = change8to10(Light.new_color[i]);
       }
 
-      bool rgbwwtable_applied_white = false;      // did we already applied RGBWWTable to white channels (ex: in white_blend_mode or virtual_ct)
       if (Light.pwm_multi_channels) {
         calcGammaMultiChannels(cur_col_10);
       } else {
         // AddLog(LOG_LEVEL_INFO, PSTR(">>> calcGammaBulbs In  %03X,%03X,%03X,%03X,%03X"), cur_col_10[0], cur_col_10[1], cur_col_10[2], cur_col_10[3], cur_col_10[4]);
-        rgbwwtable_applied_white = calcGammaBulbs(cur_col_10);     // true means that one PWM channel is used for CT
+        calcGammaBulbs(cur_col_10);
         // AddLog(LOG_LEVEL_INFO, PSTR(">>> calcGammaBulbs Out %03X,%03X,%03X,%03X,%03X"), cur_col_10[0], cur_col_10[1], cur_col_10[2], cur_col_10[3], cur_col_10[4]);
-      }
-
-      // Apply RGBWWTable only if not Settings->flag4.white_blend_mode
-      for (uint32_t i = 0; i < (rgbwwtable_applied_white ? 3 : Light.subtype); i++) {
-        uint32_t adjust = change8to10(Settings->rgbwwTable[i]);
-        cur_col_10[i] = changeUIntScale(cur_col_10[i], 0, 1023, 0, adjust);
       }
 
       // final adjusments for PMW ranges, post-gamma correction
@@ -2087,7 +2088,7 @@ bool LightApplyFade(void) {   // did the value chanegd and needs to be applied
       Light.fade_duration = LightGetSpeedSetting() * 500;
       Light.speed_once_enabled = false; // The once off speed value has been read, reset it
       if (!Settings->flag5.fade_fixed_duration) {
-        Light.fade_duration = (distance * Light.fade_duration) / 1023;    // time is proportional to distance, except with SO117
+        Light.fade_duration = (distance * Light.fade_duration) / 1023 + 1 /* make sure value is not zero */;    // time is proportional to distance, except with SO117
       }
       if (Settings->save_data) {
         // Also postpone the save_data for the duration of the Fade (in seconds)
@@ -2195,8 +2196,10 @@ void LightSetOutputs(const uint16_t *cur_col_10) {
         TasmotaGlobal.pwm_value[i] = cur_col;   // mark the new expected value
         // AddLog(LOG_LEVEL_DEBUG_MORE, "analogWrite-%i 0x%03X", i, cur_col);
 #else // ESP32
-        analogWrite(Pin(GPIO_PWM1, i), bitRead(TasmotaGlobal.pwm_inverted, i) ? Settings->pwm_range - cur_col : cur_col);
-        // AddLog(LOG_LEVEL_DEBUG_MORE, "analogWrite-%i 0x%03X", bitRead(TasmotaGlobal.pwm_inverted, i) ? Settings->pwm_range - cur_col : cur_col);
+        if (!Settings->flag4.zerocross_dimmer) {
+          AnalogWrite(Pin(GPIO_PWM1, i), bitRead(TasmotaGlobal.pwm_inverted, i) ? Settings->pwm_range - cur_col : cur_col);
+          // AddLog(LOG_LEVEL_DEBUG_MORE, "analogWrite-%i 0x%03X", bitRead(TasmotaGlobal.pwm_inverted, i) ? Settings->pwm_range - cur_col : cur_col);
+        }
 #endif // ESP32
       }
     }
@@ -2320,9 +2323,8 @@ void calcGammaBulb5Channels_8(uint8_t in8[LST_MAX], uint16_t col10[LST_MAX]) {
   calcGammaBulb5Channels(col10, nullptr, nullptr);
 }
 
-bool calcGammaBulbs(uint16_t cur_col_10[5]) {
+void calcGammaBulbs(uint16_t cur_col_10[5]) {
   bool rgbwwtable_applied_white = false;
-  bool pwm_ct = false;
   bool white_free_cw = false;         // true if White channels are uncorrelated. Happens when CW+WW>255, i.e. manually setting white channels to exceed to total power of a single channel (may harm the power supply)
   // Various values needed for accurate White calculation
   // CT value streteched to 0..1023 (from within CT range, so not necessarily from 153 to 500). 0=Cold, 1023=Warm
@@ -2340,24 +2342,7 @@ bool calcGammaBulbs(uint16_t cur_col_10[5]) {
     calcGammaBulbCW(cur_col_10, &white_bri10, &white_free_cw);
   }
 
-  // Now we know ct_10 and white_bri10 (gamma corrected if needed)
-
-  if ((LST_COLDWARM == Light.subtype) || (LST_RGBCW == Light.subtype)) {
-#ifdef ESP8266
-    if ((PHILIPS == TasmotaGlobal.module_type) || (Settings->flag4.pwm_ct_mode)) {   // channel 1 is the color tone, mapped to cold channel (0..255)
-#else
-    if (Settings->flag4.pwm_ct_mode) {   // channel 1 is the color tone, mapped to cold channel (0..255)
-#endif  // ESP8266
-      pwm_ct = true;
-      // Xiaomi Philips bulbs follow a different scheme:
-      // channel 0=intensity, channel1=temperature
-      cur_col_10[cw0] = white_bri10;
-      cur_col_10[cw0+1] = ct_10;
-      return false;     // avoid any interference
-    }
-  }
-
-  // Now see if we need to mix RGB and  White
+  // Now see if we need to mix RGB and White
   // Valid only for LST_RGBW, LST_RGBCW, SetOption105 1, and white is zero (see doc)
   if ((LST_RGBW <= Light.subtype) && (Settings->flag4.white_blend_mode) && (0 == cur_col_10[3]+cur_col_10[4])) {
     uint32_t min_rgb_10 = min3(cur_col_10[0], cur_col_10[1], cur_col_10[2]);
@@ -2421,7 +2406,27 @@ bool calcGammaBulbs(uint16_t cur_col_10[5]) {
       cur_col_10[cw0] = white_bri10 - cur_col_10[cw0+1];
     }
   }
-  return rgbwwtable_applied_white;
+
+  // Apply RGBWWTable (RGB: always, CW: only if white_blend_mode is not engaged)
+  for (uint32_t i = 0; i < (rgbwwtable_applied_white ? 3 : Light.subtype); i++) {
+    uint32_t adjust = change8to10(Settings->rgbwwTable[i]);
+    cur_col_10[i] = changeUIntScale(cur_col_10[i], 0, 1023, 0, adjust);
+  }
+
+  // Implement SO92: Some lights like Xiaomi Philips bulbs follow the scheme
+  // cw0=intensity, cw0+1=temperature
+  if (ChannelCT() >= 0) {
+    // Need to compute white_bri10 and ct_10 from cur_col_10[] for compatibility with VirtualCT
+    white_bri10 = cur_col_10[cw0] + cur_col_10[cw0+1];
+    if (white_bri10 > 1023) {
+      // In white_free_cw mode, the combined brightness of cw and ww may be larger than 1023.
+      // This cannot be represented in pwm_ct_mode, so we set the maximum brightness instead.
+      white_bri10 = 1023;
+    }
+
+    cur_col_10[cw0] = white_bri10;
+    cur_col_10[cw0+1] = ct_10;
+  }
 }
 
 #ifdef USE_DEVICE_GROUPS
@@ -3280,6 +3285,7 @@ void CmndVirtualCT(void)
     }
   }
   checkVirtualCT();
+  Light.update = true;
 
   Response_P(PSTR("{\"%s\":{"), XdrvMailbox.command);
   uint32_t pivot_len = CT_PIVOTS;
@@ -3459,17 +3465,20 @@ bool Xdrv04(uint32_t function)
         LightInit();
         break;
 #ifdef USE_LIGHT_ARTNET
-    case FUNC_JSON_APPEND:
-      ArtNetJSONAppend();
-      break;
-    case FUNC_NETWORK_UP:
-      ArtNetFuncNetworkUp();
-      break;
-    case FUNC_NETWORK_DOWN:
-      ArtNetFuncNetworkDown();
-      break;
+      case FUNC_JSON_APPEND:
+        ArtNetJSONAppend();
+        break;
+      case FUNC_NETWORK_UP:
+        ArtNetFuncNetworkUp();
+        break;
+      case FUNC_NETWORK_DOWN:
+        ArtNetFuncNetworkDown();
+        break;
 #endif // USE_LIGHT_ARTNET
-    }
+      case FUNC_ACTIVE:
+        result = true;
+        break;
+   }
   }
   return result;
 }

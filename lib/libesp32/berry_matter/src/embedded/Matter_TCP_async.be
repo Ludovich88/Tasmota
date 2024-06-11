@@ -17,6 +17,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import matter
+
 #@ solidify:Matter_TCP_async,weak
 
 # Status:
@@ -79,8 +81,7 @@ class Matter_TCP_async
       end
       return true
     else
-      import string
-      tasmota.log(string.format("BRY: failed to resolve [%s]:%i", self.addr, self.port), 3)
+      log(format("BRY: failed to resolve [%s]:%i", self.addr, self.port), 3)
       self.close()
       self.status = -1
       self.tcp_connected = false
